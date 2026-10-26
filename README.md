@@ -2,10 +2,6 @@
 
 The official cryptographic manifest signer and integrity verification tool for Delulu local addons (`DAD protocol v2.0`).
 
-```bash
-cargo install --path .
-```
-
 ---
 
 ## What is this?
@@ -136,7 +132,7 @@ Requirements: Modern Rust toolchain.
 
 ```bash
 # Clone the repository
-git clone <repo-url>
+git clone https://github.com/delulu-org/delulu-sigil.git
 cd delulu-sigil
 
 # Run test suite
@@ -144,6 +140,9 @@ cargo test
 
 # Build optimized release binary
 cargo build --release
+
+# Or build and install the CLI onto your PATH (available as `delulu-sigil`)
+cargo install --path .
 ```
 
 The compiled binary will be placed at `target/release/delulu-sigil.exe` (or `target/release/delulu-sigil` on other platforms). 
