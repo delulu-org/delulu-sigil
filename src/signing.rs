@@ -21,6 +21,8 @@ use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
+use dad_local_core::is_https_url;
+
 /// Domain-separation tag prepended to every signed payload. Bumping this
 /// string invalidates every existing signature — that is the point.
 pub const PAYLOAD_DOMAIN: &[u8] = b"dad-local-manifest-v1\0";
@@ -176,6 +178,7 @@ pub fn run_sign(
         println!("  {platform:<16} sha256 {hash}");
     }
 
+    ensure_publishable(&manifest)?;
     manifest.signature = sign(&manifest, &key)?;
 
     let out_value = serde_json::to_value(&manifest)
@@ -201,6 +204,33 @@ pub fn run_sign(
         dest.display()
     );
     Ok(())
+}
+
+/// A signed manifest is a published manifest: every declared platform must
+/// carry a real download URL and binary hash. `run_sign` only fills entries
+/// handed to it via `--artifact` and leaves the rest untouched, so an
+/// incomplete manifest would otherwise be sealed with a hashless binary
+/// slot — reject that here, before the signature exists.
+fn ensure_publishable(manifest: &LocalAddonManifest) -> Result<(), String> {
+    let mut incomplete: Vec<String> = Vec::new();
+    for (platform, asset) in &manifest.platform_assets {
+        if asset.download_url.trim().is_empty() || !is_https_url(&asset.download_url) {
+            incomplete.push(format!("{platform} (download_url must be an HTTPS URL)"));
+        } else if asset.sha256.trim().is_empty() {
+            incomplete.push(format!(
+                "{platform} (sha256 is empty — pass --artifact {platform}=PATH to hash its \
+                 binary, or remove the entry if this platform has no build)"
+            ));
+        }
+    }
+    if incomplete.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "refusing to sign an incomplete manifest:\n  - {}",
+            incomplete.join("\n  - ")
+        ))
+    }
 }
 
 /// `delulu-sigil verify` — recompute the payload and check the signature.
@@ -311,5 +341,40 @@ mod tests {
         assert!(parse_verifying_key("abcd").is_err());
         assert!(parse_verifying_key("zz").is_err());
         assert!(parse_verifying_key(&hex::encode([0u8; 32])).is_ok());
+    }
+
+    #[test]
+    fn signing_requires_every_declared_platform_to_be_hashed() {
+        let manifest = fixture();
+        assert!(ensure_publishable(&manifest).is_ok());
+
+        // A fully built-out authoring manifest: valid, but one platform was
+        // never hashed. Signing it would publish a hashless binary slot.
+        let half_filled = LocalAddonManifest::parse(&json!({
+            "id": "org.example.test",
+            "name": "Test",
+            "version": "1.0.0",
+            "type": "local",
+            "protocol_version": "2.0",
+            "capabilities": ["meta"],
+            "platform_assets": {
+                "windows-x64": {
+                    "download_url": "https://example.com/a.exe",
+                    "binary_name": "a.exe",
+                    "sha256": "ab".repeat(32),
+                    "entry_command": "rpc"
+                },
+                "mac-arm64": {
+                    "download_url": "https://example.com/a",
+                    "binary_name": "a",
+                    "sha256": "",
+                    "entry_command": "rpc"
+                }
+            },
+            "signature": ""
+        }))
+        .expect("an unfilled platform is legal in the authoring state");
+        let err = ensure_publishable(&half_filled).unwrap_err();
+        assert!(err.contains("mac-arm64"), "error must name the platform: {err}");
     }
 }
