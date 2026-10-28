@@ -179,8 +179,8 @@ dependencies = [
 
 [[package]]
 name = "dad-local-core"
-version = "0.1.1"
-source = "git+https://github.com/delulu-org/dad-sdk-local?tag=v0.1.1#f82b5e799feb9048718b7fc23ccd5ec63e78f3ed"
+version = "0.2.0"
+source = "git+https://github.com/delulu-org/dad-sdk-local?tag=v0.2.0#94ac0d7a7023e5e96a5d184b4daebe46cd332253"
 dependencies = [
  "serde",
  "serde_json",
